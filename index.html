@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Token Approval Demo (Testnet Only)</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+</head>
+<body>
+    <h1>Approval Demo (BSC Testnet)</h1>
+    
+    <button id="connectWallet">Connect Wallet</button>
+    
+    <div id="walletInfo" style="display:none;">
+        <p>Connected: <span id="walletAddress"></span></p>
+        <button id="checkApproval">Check BUSD Approval</button>
+        <button id="demoApprove">Demo Approval</button>
+        <p id="approvalStatus"></p>
+    </div>
+
+    <script>
+        // BUSD Testnet Contract
+        const BUSD_TESTNET = "0x8301F2213c0eeD49a7E28Ae4c3e91722919B8B47";
+        
+        // Your deployed contract address
+        const DEMO_CONTRACT = "0x6458b5fa695016611bab93350ec852e30c25c67f"; 
+
+        let web3;
+        let accounts = [];
+
+        document.getElementById('connectWallet').onclick = async () => {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    document.getElementById('walletAddress').textContent = accounts[0];
+                    document.getElementById('walletInfo').style.display = 'block';
+                } catch (error) {
+                    console.error("User denied access");
+                }
+            } else {
+                alert("MetaMask not detected!");
+            }
+        };
+
+        // Check existing approval
+        document.getElementById('checkApproval').onclick = async () => {
+            const erc20 = new web3.eth.Contract([
+                {
+                    "constant": true,
+                    "inputs": [
+                        {"name": "owner", "type": "address"},
+                        {"name": "spender", "type": "address"}
+                    ],
+                    "name": "allowance",
+                    "outputs": [{"name": "", "type": "uint256"}],
+                    "type": "function"
+                }
+            ], BUSD_TESTNET);
+
+            const allowance = await erc20.methods.allowance(accounts[0], DEMO_CONTRACT).call();
+            document.getElementById('approvalStatus').textContent = 
+                `Current allowance: ${allowance / 1e18} BUSD`;
+        };
+
+        // Demo approval (simulates what victims accidentally sign)
+        document.getElementById('demoApprove').onclick = async () => {
+            const erc20 = new web3.eth.Contract([
+                {
+                    "constant": false,
+                    "inputs": [
+                        {"name": "spender", "type": "address"},
+                        {"name": "amount", "type": "uint256"}
+                    ],
+                    "name": "approve",
+                    "outputs": [{"name": "", "type": "bool"}],
+                    "type": "function"
+                }
+            ], BUSD_TESTNET);
+
+            try {
+                await erc20.methods.approve(DEMO_CONTRACT, web3.utils.toWei("1000000")).send({ from: accounts[0] });
+                alert("Approval successful (Demo only - no real funds at risk)");
+            } catch (error) {
+                console.error(error);
+                alert("Approval failed");
+            }
+        };
+    </script>
+</body>
+</html>
